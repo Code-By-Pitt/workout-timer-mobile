@@ -109,3 +109,8 @@ export async function playPlaylist(
 export async function pausePlayback(): Promise<void> {
   await apiFetch("/me/player/pause", { method: "PUT" });
 }
+
+// Resumes currently-queued playback without restarting the playlist
+export async function resumePlayback(): Promise<void> {
+  await apiFetch("/me/player/play", { method: "PUT" });
+}

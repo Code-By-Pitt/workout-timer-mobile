@@ -98,16 +98,49 @@ export default function TimerScreen() {
     }
   }
 
+  function isSpotifyControlled(config: WorkoutConfig) {
+    return Boolean(config.spotifyPlaylist) && loggedIn && isPremium;
+  }
+
   async function handleStart() {
     if (!audioPrewarmed.current) {
       await preloadSounds();
       audioPrewarmed.current = true;
     }
-    // Only on first start (idle → workout), not on resume
     if (state.phase === "idle") {
+      // First start: begin playback from the picked playlist
       await openSpotifyForConfig(state.config);
+    } else if (isSpotifyControlled(state.config)) {
+      // Resume existing playback without restarting the playlist
+      try {
+        await spotifyApi.resumePlayback();
+      } catch {
+        // ignore
+      }
     }
     start();
+  }
+
+  async function handlePause() {
+    pause();
+    if (isSpotifyControlled(state.config)) {
+      try {
+        await spotifyApi.pausePlayback();
+      } catch {
+        // ignore
+      }
+    }
+  }
+
+  async function handleReset() {
+    reset();
+    if (isSpotifyControlled(state.config)) {
+      try {
+        await spotifyApi.pausePlayback();
+      } catch {
+        // ignore
+      }
+    }
   }
 
   // Play sounds on phase transitions
@@ -121,6 +154,10 @@ export default function TimerScreen() {
       playSound(transitionSound);
     } else if (state.phase === "idle" && previousPhase !== "idle") {
       playSound("alarm");
+      // Workout complete — stop Spotify playback
+      if (isSpotifyControlled(state.config)) {
+        spotifyApi.pausePlayback().catch(() => {});
+      }
     }
   }, [state.phase, phaseChanged, previousPhase, transitionSound]);
 
@@ -193,8 +230,8 @@ export default function TimerScreen() {
           isRunning={state.isRunning}
           isIdle={isIdle}
           onStart={handleStart}
-          onPause={pause}
-          onReset={reset}
+          onPause={handlePause}
+          onReset={handleReset}
           onRestartSection={restartSection}
         />
 
@@ -202,6 +239,9 @@ export default function TimerScreen() {
           <Pressable
             onPress={() => {
               reset();
+              if (isSpotifyControlled(state.config)) {
+                spotifyApi.pausePlayback().catch(() => {});
+              }
               router.back();
             }}
             className="mt-4"
