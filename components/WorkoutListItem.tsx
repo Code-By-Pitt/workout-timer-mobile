@@ -26,7 +26,12 @@ export function WorkoutListItem({ workout, onSelect, onDelete }: WorkoutListItem
         <Text className="text-lg font-semibold text-white">
           {workout.config.name || "Untitled Workout"}
         </Text>
-        <Text className="text-xs text-white/50">{summarize(workout.config)}</Text>
+        <Text className="text-xs text-white/50">
+          {summarize(workout.config)}
+          {workout.config.spotifyUrl ? (
+            <Text className="text-emerald-400">{"  🎵"}</Text>
+          ) : null}
+        </Text>
         <Text className="text-xs text-white/30">
           Last edited {new Date(workout.updatedAt).toLocaleDateString()}
         </Text>

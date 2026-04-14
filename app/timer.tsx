@@ -1,5 +1,5 @@
 import { useEffect, useRef } from "react";
-import { View, Text, Pressable } from "react-native";
+import { View, Text, Pressable, Linking } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useRouter } from "expo-router";
 import { useKeepAwake } from "expo-keep-awake";
@@ -9,6 +9,7 @@ import { TimerDisplay } from "@/components/TimerDisplay";
 import { TimerControls } from "@/components/TimerControls";
 import { RepetitionCounter } from "@/components/RepetitionCounter";
 import { playSound, preloadSounds } from "@/lib/playSound";
+import { parseSpotifyLink } from "@/lib/spotify";
 import type { Phase } from "@/lib/timer";
 
 const COUNTDOWN_SECONDS = 10;
@@ -56,6 +57,21 @@ export default function TimerScreen() {
     if (!audioPrewarmed.current) {
       await preloadSounds();
       audioPrewarmed.current = true;
+    }
+    // Open Spotify only on the first start (idle → workout), not on resume
+    if (state.phase === "idle" && state.config.spotifyUrl) {
+      const link = parseSpotifyLink(state.config.spotifyUrl);
+      if (link) {
+        try {
+          await Linking.openURL(link.appUri);
+        } catch {
+          try {
+            await Linking.openURL(link.webUrl);
+          } catch {
+            // swallow — don't block the timer
+          }
+        }
+      }
     }
     start();
   }

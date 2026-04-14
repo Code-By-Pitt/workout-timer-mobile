@@ -10,6 +10,7 @@ import {
   type WorkoutConfig,
   type Section,
 } from "@/lib/timer";
+import { parseSpotifyLink } from "@/lib/spotify";
 
 export default function EditorScreen() {
   const router = useRouter();
@@ -68,6 +69,39 @@ export default function EditorScreen() {
           placeholderTextColor="rgba(255,255,255,0.3)"
           className="rounded-xl bg-white/10 px-4 py-3 text-white"
         />
+
+        {/* Spotify URL */}
+        <View className="gap-1.5">
+          <Text className="text-xs font-medium text-white/60">
+            Music (optional)
+          </Text>
+          <TextInput
+            value={workout.spotifyUrl ?? ""}
+            onChangeText={(text) => setWorkout({ ...workout, spotifyUrl: text })}
+            placeholder="Paste Spotify link (playlist, album, track)"
+            placeholderTextColor="rgba(255,255,255,0.3)"
+            autoCapitalize="none"
+            autoCorrect={false}
+            className="rounded-xl bg-white/10 px-4 py-3 text-white"
+          />
+          {(() => {
+            const value = workout.spotifyUrl?.trim() ?? "";
+            if (!value) return null;
+            const parsed = parseSpotifyLink(value);
+            if (parsed) {
+              return (
+                <Text className="text-xs text-emerald-400">
+                  ✓ Ready — opens when you start the workout
+                </Text>
+              );
+            }
+            return (
+              <Text className="text-xs text-red-400">
+                Not a valid Spotify link
+              </Text>
+            );
+          })()}
+        </View>
 
         <View className="gap-4">
           {workout.sections.map((section, i) => (

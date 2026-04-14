@@ -25,6 +25,7 @@ export interface Section {
 export interface WorkoutConfig {
   name: string;
   sections: Section[];
+  spotifyUrl?: string;
 }
 
 export interface TimerState {
