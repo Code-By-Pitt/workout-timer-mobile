@@ -12,7 +12,9 @@
       "supportsTablet": false,
       "bundleIdentifier": "com.codebypitt.workouttimer",
       "infoPlist": {
-        "UIBackgroundModes": ["audio"]
+        "UIBackgroundModes": [
+          "audio"
+        ]
       }
     },
     "android": {
@@ -37,10 +39,15 @@
           "imageWidth": 200,
           "resizeMode": "contain"
         }
-      ]
+      ],
+      "expo-secure-store",
+      "expo-web-browser"
     ],
     "experiments": {
       "typedRoutes": true
+    },
+    "extra": {
+      "spotifyClientId": "8debaff7dd5e4cb5bf4ee1fe6014265a"
     }
   }
 }

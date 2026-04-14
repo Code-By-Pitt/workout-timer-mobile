@@ -28,7 +28,7 @@ export function WorkoutListItem({ workout, onSelect, onDelete }: WorkoutListItem
         </Text>
         <Text className="text-xs text-white/50">
           {summarize(workout.config)}
-          {workout.config.spotifyUrl ? (
+          {workout.config.spotifyPlaylist || workout.config.spotifyUrl ? (
             <Text className="text-emerald-400">{"  🎵"}</Text>
           ) : null}
         </Text>

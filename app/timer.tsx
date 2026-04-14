@@ -1,16 +1,18 @@
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import { View, Text, Pressable, Linking } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useRouter } from "expo-router";
 import { useKeepAwake } from "expo-keep-awake";
 import { useTimer } from "@/hooks/useTimer";
 import { useWorkoutContext } from "@/lib/WorkoutContext";
+import { useSpotify } from "@/hooks/useSpotify";
 import { TimerDisplay } from "@/components/TimerDisplay";
 import { TimerControls } from "@/components/TimerControls";
 import { RepetitionCounter } from "@/components/RepetitionCounter";
 import { playSound, preloadSounds } from "@/lib/playSound";
 import { parseSpotifyLink } from "@/lib/spotify";
-import type { Phase } from "@/lib/timer";
+import * as spotifyApi from "@/lib/spotifyApi";
+import type { Phase, WorkoutConfig } from "@/lib/timer";
 
 const COUNTDOWN_SECONDS = 10;
 
@@ -36,6 +38,13 @@ export default function TimerScreen() {
   } = useTimer(runningConfig ?? undefined);
   const audioPrewarmed = useRef(false);
   const initRef = useRef(false);
+  const { loggedIn, isPremium } = useSpotify();
+  const [toast, setToast] = useState<string | null>(null);
+
+  function showToast(message: string) {
+    setToast(message);
+    setTimeout(() => setToast(null), 4000);
+  }
 
   // Keep screen awake while timer is running
   useKeepAwake();
@@ -53,14 +62,28 @@ export default function TimerScreen() {
   const currentRound = currentSection?.rounds[state.currentRoundIndex];
   const transitionSound = currentSection?.transitionSound ?? "beep";
 
-  async function handleStart() {
-    if (!audioPrewarmed.current) {
-      await preloadSounds();
-      audioPrewarmed.current = true;
+  async function openSpotifyForConfig(config: WorkoutConfig) {
+    // Prefer picked playlist via Connect API (Premium users)
+    if (config.spotifyPlaylist && loggedIn && isPremium) {
+      try {
+        const devices = await spotifyApi.getDevices();
+        const active = devices.find((d) => d.is_active) ?? devices[0];
+        if (!active) {
+          showToast("Open Spotify on a device to enable playback");
+        } else {
+          await spotifyApi.playPlaylist(
+            config.spotifyPlaylist.uri,
+            active.id
+          );
+        }
+      } catch {
+        showToast("Spotify playback failed — starting timer anyway");
+      }
+      return;
     }
-    // Open Spotify only on the first start (idle → workout), not on resume
-    if (state.phase === "idle" && state.config.spotifyUrl) {
-      const link = parseSpotifyLink(state.config.spotifyUrl);
+    // Fallback: legacy pasted URL (free users or no playlist picked)
+    if (config.spotifyUrl) {
+      const link = parseSpotifyLink(config.spotifyUrl);
       if (link) {
         try {
           await Linking.openURL(link.appUri);
@@ -72,6 +95,17 @@ export default function TimerScreen() {
           }
         }
       }
+    }
+  }
+
+  async function handleStart() {
+    if (!audioPrewarmed.current) {
+      await preloadSounds();
+      audioPrewarmed.current = true;
+    }
+    // Only on first start (idle → workout), not on resume
+    if (state.phase === "idle") {
+      await openSpotifyForConfig(state.config);
     }
     start();
   }
@@ -176,6 +210,14 @@ export default function TimerScreen() {
           </Pressable>
         )}
       </View>
+
+      {toast && (
+        <View className="absolute bottom-10 left-4 right-4 items-center">
+          <View className="rounded-full bg-black/80 px-4 py-2">
+            <Text className="text-sm text-white">{toast}</Text>
+          </View>
+        </View>
+      )}
     </SafeAreaView>
   );
 }

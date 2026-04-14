@@ -22,10 +22,19 @@ export interface Section {
   restBetweenSections: number;
 }
 
+export interface SpotifyPlaylistRef {
+  id: string;
+  uri: string;
+  name: string;
+  imageUrl?: string;
+  trackCount?: number;
+}
+
 export interface WorkoutConfig {
   name: string;
   sections: Section[];
   spotifyUrl?: string;
+  spotifyPlaylist?: SpotifyPlaylistRef;
 }
 
 export interface TimerState {
