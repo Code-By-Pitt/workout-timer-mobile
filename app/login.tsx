@@ -4,7 +4,7 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import { useAuth } from "@/hooks/useAuth";
 
 export default function LoginScreen() {
-  const { signUp, signIn, signInWithGoogle, signInWithSpotify } = useAuth();
+  const { signUp, signIn, signInWithGoogle, signInWithSpotify, resetPassword } = useAuth();
   const [isSignUp, setIsSignUp] = useState(false);
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -105,6 +105,28 @@ export default function LoginScreen() {
             {submitting ? "..." : isSignUp ? "Sign Up" : "Sign In"}
           </Text>
         </Pressable>
+
+        {!isSignUp && (
+          <Pressable
+            onPress={async () => {
+              if (!email) {
+                setError("Enter your email above, then tap Forgot Password");
+                return;
+              }
+              setError(null);
+              const err = await resetPassword(email);
+              if (err) {
+                setError(err);
+              } else {
+                setMessage("Password reset email sent — check your inbox");
+              }
+            }}
+          >
+            <Text className="text-center text-sm text-white/50">
+              Forgot password?
+            </Text>
+          </Pressable>
+        )}
 
         <Pressable
           onPress={() => {
