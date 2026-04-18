@@ -1,16 +1,32 @@
 import "../global.css";
 import { Stack } from "expo-router";
 import { StatusBar } from "expo-status-bar";
+import { View, Text } from "react-native";
 import { WorkoutProvider } from "@/lib/WorkoutContext";
 import { WorkoutStorageProvider } from "@/hooks/useWorkoutStorage";
 import { SpotifyProvider } from "@/hooks/useSpotify";
+import { AuthProvider, useAuth } from "@/hooks/useAuth";
+import LoginScreen from "./login";
 
-export default function RootLayout() {
+function AppContent() {
+  const { user, loading } = useAuth();
+
+  if (loading) {
+    return (
+      <View className="flex-1 items-center justify-center bg-slate-800">
+        <Text className="text-white/50">Loading...</Text>
+      </View>
+    );
+  }
+
+  if (!user) {
+    return <LoginScreen />;
+  }
+
   return (
     <SpotifyProvider>
       <WorkoutStorageProvider>
         <WorkoutProvider>
-          <StatusBar style="light" />
           <Stack
             screenOptions={{
               headerShown: false,
@@ -24,5 +40,14 @@ export default function RootLayout() {
         </WorkoutProvider>
       </WorkoutStorageProvider>
     </SpotifyProvider>
+  );
+}
+
+export default function RootLayout() {
+  return (
+    <AuthProvider>
+      <StatusBar style="light" />
+      <AppContent />
+    </AuthProvider>
   );
 }

@@ -1,6 +1,10 @@
+// Spotify OAuth — tokens stored in Supabase spotify_tokens table
+// Access token cached in memory + SecureStore for offline resilience
+
 import * as AuthSession from "expo-auth-session";
 import * as SecureStore from "expo-secure-store";
 import Constants from "expo-constants";
+import { supabase } from "./supabase";
 
 const CLIENT_ID =
   (Constants.expoConfig?.extra?.spotifyClientId as string | undefined) ?? "";
@@ -19,11 +23,9 @@ const SCOPES = [
   "user-modify-playback-state",
 ];
 
-const KEYS = {
-  accessToken: "spotify_access_token",
-  refreshToken: "spotify_refresh_token",
-  expiresAt: "spotify_expires_at",
-} as const;
+// In-memory cache
+let cachedAccessToken: string | null = null;
+let cachedExpiresAt = 0;
 
 function getRedirectUri(): string {
   return AuthSession.makeRedirectUri({
@@ -49,7 +51,6 @@ export async function startLoginInteractive(): Promise<boolean> {
     return false;
   }
 
-  // Exchange code for tokens
   const tokenResult = await AuthSession.exchangeCodeAsync(
     {
       clientId: CLIENT_ID,
@@ -75,51 +76,112 @@ async function storeTokens(
   refreshToken: string,
   expiresIn: number
 ) {
-  await SecureStore.setItemAsync(KEYS.accessToken, accessToken);
-  if (refreshToken) {
-    await SecureStore.setItemAsync(KEYS.refreshToken, refreshToken);
+  const expiresAt = Date.now() + expiresIn * 1000;
+
+  // Memory cache
+  cachedAccessToken = accessToken;
+  cachedExpiresAt = expiresAt;
+
+  // SecureStore cache (for quick offline access)
+  try {
+    await SecureStore.setItemAsync("spotify_access_token", accessToken);
+    await SecureStore.setItemAsync("spotify_expires_at", String(expiresAt));
+  } catch {
+    // ignore
   }
-  await SecureStore.setItemAsync(
-    KEYS.expiresAt,
-    String(Date.now() + expiresIn * 1000)
+
+  // Persist to Supabase (source of truth, cross-device)
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) return;
+
+  await supabase.from("spotify_tokens").upsert(
+    {
+      user_id: user.id,
+      access_token: accessToken,
+      refresh_token: refreshToken,
+      expires_at: expiresAt,
+      updated_at: new Date().toISOString(),
+    },
+    { onConflict: "user_id" }
   );
 }
 
 export async function isLoggedIn(): Promise<boolean> {
-  const token = await SecureStore.getItemAsync(KEYS.accessToken);
-  const refresh = await SecureStore.getItemAsync(KEYS.refreshToken);
-  return Boolean(token && refresh);
+  if (cachedAccessToken) return true;
+  const tokens = await loadTokensFromSupabase();
+  return tokens !== null;
 }
 
 export async function logout(): Promise<void> {
-  await SecureStore.deleteItemAsync(KEYS.accessToken);
-  await SecureStore.deleteItemAsync(KEYS.refreshToken);
-  await SecureStore.deleteItemAsync(KEYS.expiresAt);
+  cachedAccessToken = null;
+  cachedExpiresAt = 0;
+
+  try {
+    await SecureStore.deleteItemAsync("spotify_access_token");
+    await SecureStore.deleteItemAsync("spotify_expires_at");
+  } catch {
+    // ignore
+  }
+
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (user) {
+    await supabase.from("spotify_tokens").delete().eq("user_id", user.id);
+  }
 }
 
 let refreshPromise: Promise<string | null> | null = null;
 
 export async function getAccessToken(): Promise<string | null> {
-  const token = await SecureStore.getItemAsync(KEYS.accessToken);
-  const expiresAtRaw = await SecureStore.getItemAsync(KEYS.expiresAt);
-  const expiresAt = Number(expiresAtRaw ?? 0);
-
-  if (token && Date.now() < expiresAt - 30_000) {
-    return token;
+  // Return cached if valid
+  if (cachedAccessToken && Date.now() < cachedExpiresAt - 30_000) {
+    return cachedAccessToken;
   }
 
-  const refreshToken = await SecureStore.getItemAsync(KEYS.refreshToken);
-  if (!refreshToken) return null;
+  // Try Supabase
+  const tokens = await loadTokensFromSupabase();
+  if (!tokens) return null;
 
+  if (Date.now() < tokens.expires_at - 30_000) {
+    cachedAccessToken = tokens.access_token;
+    cachedExpiresAt = tokens.expires_at;
+    return tokens.access_token;
+  }
+
+  // Refresh
   if (!refreshPromise) {
-    refreshPromise = refreshAccessToken(refreshToken).finally(() => {
+    refreshPromise = refreshAccessToken(tokens.refresh_token).finally(() => {
       refreshPromise = null;
     });
   }
   return refreshPromise;
 }
 
-async function refreshAccessToken(refreshToken: string): Promise<string | null> {
+async function loadTokensFromSupabase(): Promise<{
+  access_token: string;
+  refresh_token: string;
+  expires_at: number;
+} | null> {
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) return null;
+
+  const { data } = await supabase
+    .from("spotify_tokens")
+    .select("access_token, refresh_token, expires_at")
+    .eq("user_id", user.id)
+    .single();
+
+  return data ?? null;
+}
+
+async function refreshAccessToken(
+  refreshToken: string
+): Promise<string | null> {
   try {
     const tokenResult = await AuthSession.refreshAsync(
       {

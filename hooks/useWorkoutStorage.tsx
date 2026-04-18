@@ -7,42 +7,11 @@ import {
   type ReactNode,
 } from "react";
 import AsyncStorage from "@react-native-async-storage/async-storage";
+import { supabase } from "@/lib/supabase";
+import { useAuth } from "@/hooks/useAuth";
 import type { SavedWorkout, WorkoutConfig } from "@/lib/timer";
 
-const STORAGE_KEY = "workout-timer-workouts";
-
-function migrateConfig(config: WorkoutConfig): WorkoutConfig {
-  return {
-    ...config,
-    sections: config.sections.map((s) => ({
-      ...s,
-      restBetweenSections: s.restBetweenSections ?? 60,
-    })),
-  };
-}
-
-async function loadAll(): Promise<SavedWorkout[]> {
-  try {
-    const raw = await AsyncStorage.getItem(STORAGE_KEY);
-    if (!raw) return [];
-    const parsed: SavedWorkout[] = JSON.parse(raw);
-    return parsed.map((w) => ({ ...w, config: migrateConfig(w.config) }));
-  } catch {
-    return [];
-  }
-}
-
-async function saveAll(workouts: SavedWorkout[]) {
-  try {
-    await AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(workouts));
-  } catch {
-    // ignore
-  }
-}
-
-function generateId(): string {
-  return `${Date.now()}-${Math.random().toString(36).slice(2, 11)}`;
-}
+const LOCAL_STORAGE_KEY = "workout-timer-workouts";
 
 interface WorkoutStorageValue {
   workouts: SavedWorkout[];
@@ -54,53 +23,100 @@ interface WorkoutStorageValue {
 const WorkoutStorageContext = createContext<WorkoutStorageValue | null>(null);
 
 export function WorkoutStorageProvider({ children }: { children: ReactNode }) {
+  const { user } = useAuth();
   const [workouts, setWorkouts] = useState<SavedWorkout[]>([]);
   const [loaded, setLoaded] = useState(false);
 
   useEffect(() => {
-    loadAll().then((items) => {
-      setWorkouts(items);
+    if (!user) return;
+
+    async function loadAndMigrate() {
+      await migrateLocalWorkouts(user!.id);
+
+      const { data } = await supabase
+        .from("workouts")
+        .select("*")
+        .order("updated_at", { ascending: false });
+
+      if (data) {
+        setWorkouts(
+          data.map((row) => ({
+            id: row.id,
+            config: row.config as WorkoutConfig,
+            createdAt: new Date(row.created_at).getTime(),
+            updatedAt: new Date(row.updated_at).getTime(),
+          }))
+        );
+      }
       setLoaded(true);
-    });
-  }, []);
+    }
+
+    loadAndMigrate();
+  }, [user]);
 
   const save = useCallback(
     async (config: WorkoutConfig, existingId?: string): Promise<void> => {
-      // Use functional setState to avoid stale closures
-      return new Promise((resolve) => {
-        setWorkouts((current) => {
-          const now = Date.now();
-          let updated: SavedWorkout[];
-          if (existingId) {
-            updated = current.map((w) =>
-              w.id === existingId ? { ...w, config, updatedAt: now } : w
-            );
-          } else {
-            const newWorkout: SavedWorkout = {
-              id: generateId(),
-              config,
-              createdAt: now,
-              updatedAt: now,
-            };
-            updated = [newWorkout, ...current];
-          }
-          saveAll(updated).then(resolve);
-          return updated;
-        });
-      });
+      if (!user) return;
+
+      if (existingId) {
+        const { error } = await supabase
+          .from("workouts")
+          .update({
+            name: config.name,
+            config,
+            updated_at: new Date().toISOString(),
+          })
+          .eq("id", existingId);
+
+        if (!error) {
+          setWorkouts((prev) =>
+            prev.map((w) =>
+              w.id === existingId
+                ? { ...w, config, updatedAt: Date.now() }
+                : w
+            )
+          );
+        }
+      } else {
+        const { data, error } = await supabase
+          .from("workouts")
+          .insert({
+            user_id: user.id,
+            name: config.name,
+            config,
+          })
+          .select()
+          .single();
+
+        if (!error && data) {
+          const newWorkout: SavedWorkout = {
+            id: data.id,
+            config,
+            createdAt: new Date(data.created_at).getTime(),
+            updatedAt: new Date(data.updated_at).getTime(),
+          };
+          setWorkouts((prev) => [newWorkout, ...prev]);
+        }
+      }
     },
-    []
+    [user]
   );
 
-  const remove = useCallback(async (id: string): Promise<void> => {
-    return new Promise((resolve) => {
-      setWorkouts((current) => {
-        const updated = current.filter((w) => w.id !== id);
-        saveAll(updated).then(resolve);
-        return updated;
-      });
-    });
-  }, []);
+  const remove = useCallback(
+    async (id: string): Promise<void> => {
+      if (!user) return;
+
+      const { error } = await supabase
+        .from("workouts")
+        .delete()
+        .eq("id", id);
+
+      if (!error) {
+        setWorkouts((prev) => prev.filter((w) => w.id !== id));
+      }
+    },
+    [user]
+  );
 
   return (
     <WorkoutStorageContext.Provider value={{ workouts, loaded, save, remove }}>
@@ -117,4 +133,32 @@ export function useWorkoutStorage(): WorkoutStorageValue {
     );
   }
   return ctx;
+}
+
+async function migrateLocalWorkouts(userId: string) {
+  try {
+    const raw = await AsyncStorage.getItem(LOCAL_STORAGE_KEY);
+    if (!raw) return;
+
+    const localWorkouts: SavedWorkout[] = JSON.parse(raw);
+    if (!localWorkouts.length) {
+      await AsyncStorage.removeItem(LOCAL_STORAGE_KEY);
+      return;
+    }
+
+    const rows = localWorkouts.map((w) => ({
+      user_id: userId,
+      name: w.config.name,
+      config: w.config,
+      created_at: new Date(w.createdAt).toISOString(),
+      updated_at: new Date(w.updatedAt).toISOString(),
+    }));
+
+    const { error } = await supabase.from("workouts").insert(rows);
+    if (!error) {
+      await AsyncStorage.removeItem(LOCAL_STORAGE_KEY);
+    }
+  } catch {
+    // Don't block on migration errors
+  }
 }
