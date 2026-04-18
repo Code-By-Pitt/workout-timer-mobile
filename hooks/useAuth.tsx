@@ -93,7 +93,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     });
     const { data, error } = await supabase.auth.signInWithOAuth({
       provider: "spotify",
-      options: { redirectTo: redirectUri },
+      options: { redirectTo: redirectUri, scopes: "user-read-email" },
     });
     if (error || !data.url) return;
     const result = await WebBrowser.openAuthSessionAsync(data.url, redirectUri);
