@@ -4,7 +4,7 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import { useAuth } from "@/hooks/useAuth";
 
 export default function LoginScreen() {
-  const { signUp, signIn, signInWithGoogle } = useAuth();
+  const { signUp, signIn, signInWithGoogle, signInWithSpotify } = useAuth();
   const [isSignUp, setIsSignUp] = useState(false);
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -50,6 +50,17 @@ export default function LoginScreen() {
         >
           <Text className="text-base font-semibold text-slate-800">
             Continue with Google
+          </Text>
+        </Pressable>
+
+        {/* Spotify sign-in */}
+        <Pressable
+          onPress={signInWithSpotify}
+          className="flex-row items-center justify-center gap-3 rounded-xl py-3 active:opacity-90"
+          style={{ backgroundColor: "#1DB954" }}
+        >
+          <Text className="text-base font-semibold text-white">
+            Continue with Spotify
           </Text>
         </Pressable>
 

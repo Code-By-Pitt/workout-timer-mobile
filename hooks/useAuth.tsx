@@ -18,6 +18,7 @@ interface AuthContextValue {
   signUp: (email: string, password: string) => Promise<string | null>;
   signIn: (email: string, password: string) => Promise<string | null>;
   signInWithGoogle: () => Promise<void>;
+  signInWithSpotify: () => Promise<void>;
   signOut: () => Promise<void>;
 }
 
@@ -84,6 +85,31 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   }, []);
 
+  const signInWithSpotify = useCallback(async () => {
+    const redirectUri = AuthSession.makeRedirectUri({
+      scheme: "workouttimer",
+      path: "auth-callback",
+    });
+    const { data, error } = await supabase.auth.signInWithOAuth({
+      provider: "spotify",
+      options: { redirectTo: redirectUri },
+    });
+    if (error || !data.url) return;
+    const result = await WebBrowser.openAuthSessionAsync(data.url, redirectUri);
+    if (result.type === "success") {
+      const url = new URL(result.url);
+      const params = new URLSearchParams(url.hash.slice(1));
+      const accessToken = params.get("access_token");
+      const refreshToken = params.get("refresh_token");
+      if (accessToken && refreshToken) {
+        await supabase.auth.setSession({
+          access_token: accessToken,
+          refresh_token: refreshToken,
+        });
+      }
+    }
+  }, []);
+
   const signOut = useCallback(async () => {
     await supabase.auth.signOut();
   }, []);
@@ -97,6 +123,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         signUp,
         signIn,
         signInWithGoogle,
+        signInWithSpotify,
         signOut,
       }}
     >
