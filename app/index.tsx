@@ -10,7 +10,7 @@ import { createDefaultWorkout, type SavedWorkout } from "@/lib/timer";
 export default function LibraryScreen() {
   const router = useRouter();
   const { workouts, remove, loaded } = useWorkoutStorage();
-  const { setEditing } = useWorkoutContext();
+  const { setEditing, setRunningConfig } = useWorkoutContext();
   const { user, signOut } = useAuth();
 
   function handleNew() {
@@ -21,6 +21,11 @@ export default function LibraryScreen() {
   function handleSelect(saved: SavedWorkout) {
     setEditing(saved.config, saved.id);
     router.push("/editor");
+  }
+
+  function handleQuickStart(saved: SavedWorkout) {
+    setRunningConfig(saved.config);
+    router.push("/timer");
   }
 
   return (
@@ -62,6 +67,7 @@ export default function LibraryScreen() {
             <WorkoutListItem
               workout={item}
               onSelect={() => handleSelect(item)}
+              onQuickStart={() => handleQuickStart(item)}
               onDelete={() => remove(item.id)}
             />
           )}
