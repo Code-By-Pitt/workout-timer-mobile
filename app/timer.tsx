@@ -1,11 +1,12 @@
 import { useEffect, useRef, useState } from "react";
-import { View, Text, Pressable, Linking } from "react-native";
+import { View, Text, Pressable, Linking, useWindowDimensions } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useRouter } from "expo-router";
 import { useKeepAwake } from "expo-keep-awake";
 import { useTimer } from "@/hooks/useTimer";
 import { useWorkoutContext } from "@/lib/WorkoutContext";
 import { useSpotify } from "@/hooks/useSpotify";
+import { useOrientationLock } from "@/hooks/useOrientationLock";
 import { TimerDisplay } from "@/components/TimerDisplay";
 import { TimerControls } from "@/components/TimerControls";
 import { RepetitionCounter } from "@/components/RepetitionCounter";
@@ -37,8 +38,11 @@ const ringColor: Record<Phase, string> = {
 };
 
 export default function TimerScreen() {
+  useOrientationLock("all");
   const router = useRouter();
   const { runningConfig } = useWorkoutContext();
+  const { width, height } = useWindowDimensions();
+  const isLandscape = width > height;
   const {
     state,
     start,
@@ -212,100 +216,131 @@ export default function TimerScreen() {
 
   const progressInWorkout = computeWorkoutProgress(state);
 
+  const ringSize = isLandscape
+    ? Math.min(height * 0.78, width * 0.42)
+    : Math.min(width * 0.82, 340);
+
   return (
     <SafeAreaView
       className={`flex-1 ${bgColor[state.phase]}`}
       edges={["top", "bottom"]}
     >
-      <View className="flex-1 items-center justify-center gap-6 px-4">
-        <Text className="text-xl font-semibold uppercase tracking-wider text-white opacity-70">
-          {headerName}
-        </Text>
-
-        {/* Section rest — show upcoming section name */}
-        {state.phase === "section_rest" && (() => {
-          const nextSection = state.config.sections[state.currentSectionIndex + 1];
-          return nextSection?.name ? (
-            <Text className="text-lg font-medium text-white opacity-70">
-              Up next: {nextSection.name}
-            </Text>
-          ) : null;
-        })()}
-
-        {/* Section name when running */}
-        {!isIdle && state.phase !== "section_rest" && currentSection?.name && (
-          <Text className="text-lg font-medium text-white opacity-60">
-            {currentSection.name}
-            {totalSections > 1 && (
-              <Text className="text-sm opacity-60">
-                {`  (Section ${state.currentSectionIndex + 1}/${totalSections})`}
-              </Text>
-            )}
-          </Text>
-        )}
-
-        {/* Round label / exercise name */}
-        {!isIdle && state.phase !== "section_rest" && currentRound?.label && (
-          <Text className="text-3xl font-bold text-white">{currentRound.label}</Text>
-        )}
-
-        <ProgressRing
-          progress={progress}
-          size={300}
-          strokeWidth={12}
-          activeColor={ringColor[state.phase]}
+      <View
+        className={`flex-1 ${
+          isLandscape
+            ? "flex-row items-center justify-around gap-6 px-6"
+            : "items-center justify-center gap-6 px-4"
+        }`}
+      >
+        {/* Ring slot */}
+        <View
+          className={
+            isLandscape ? "shrink-0 items-center justify-center" : ""
+          }
         >
-          <TimerDisplay
-            secondsRemaining={state.secondsRemaining}
-            phase={state.phase}
-            pulse={shouldPulse}
-          />
-        </ProgressRing>
-
-        {!isIdle && (
-          <RepetitionCounter
-            currentRound={state.currentRoundIndex + 1}
-            totalRounds={totalRoundsInSection}
-          />
-        )}
-
-        {!isIdle && progressInWorkout && (
-          <Text
-            className="text-xs font-medium text-white/60"
-            style={{ fontVariant: ["tabular-nums"] }}
+          <ProgressRing
+            progress={progress}
+            size={ringSize}
+            strokeWidth={12}
+            activeColor={ringColor[state.phase]}
           >
-            Elapsed {formatTime(progressInWorkout.elapsedSeconds)} · Remaining{" "}
-            {formatTime(progressInWorkout.remainingSeconds)}
+            <TimerDisplay
+              secondsRemaining={state.secondsRemaining}
+              phase={state.phase}
+              pulse={shouldPulse}
+            />
+          </ProgressRing>
+        </View>
+
+        {/* Info + controls slot */}
+        <View
+          className={
+            isLandscape
+              ? "flex-1 items-center gap-3 self-stretch py-4"
+              : "items-center gap-3"
+          }
+          style={
+            isLandscape
+              ? { maxWidth: 380, justifyContent: "center" }
+              : undefined
+          }
+        >
+          <Text className="text-xl font-semibold uppercase tracking-wider text-white opacity-70">
+            {headerName}
           </Text>
-        )}
 
-        {!isIdle && <NextUpBar state={state} />}
+          {state.phase === "section_rest" && (() => {
+            const nextSection =
+              state.config.sections[state.currentSectionIndex + 1];
+            return nextSection?.name ? (
+              <Text className="text-lg font-medium text-white opacity-70">
+                Up next: {nextSection.name}
+              </Text>
+            ) : null;
+          })()}
 
-        <TimerControls
-          isRunning={state.isRunning}
-          isIdle={isIdle}
-          onStart={handleStart}
-          onPause={handlePause}
-          onReset={handleReset}
-          onRestartSection={restartSection}
-          onPreviousRound={previousRound}
-          onNextRound={nextRound}
-        />
+          {!isIdle && state.phase !== "section_rest" && currentSection?.name && (
+            <Text className="text-lg font-medium text-white opacity-60">
+              {currentSection.name}
+              {totalSections > 1 && (
+                <Text className="text-sm opacity-60">
+                  {`  (Section ${state.currentSectionIndex + 1}/${totalSections})`}
+                </Text>
+              )}
+            </Text>
+          )}
 
-        {isIdle && (
-          <Pressable
-            onPress={() => {
-              reset();
-              if (isSpotifyControlled(state.config)) {
-                spotifyApi.pausePlayback().catch(() => {});
-              }
-              router.back();
-            }}
-            className="mt-4"
-          >
-            <Text className="text-sm text-white/50">← Back to Workouts</Text>
-          </Pressable>
-        )}
+          {!isIdle && state.phase !== "section_rest" && currentRound?.label && (
+            <Text className="text-3xl font-bold text-white">
+              {currentRound.label}
+            </Text>
+          )}
+
+          {!isIdle && (
+            <RepetitionCounter
+              currentRound={state.currentRoundIndex + 1}
+              totalRounds={totalRoundsInSection}
+            />
+          )}
+
+          {!isIdle && progressInWorkout && (
+            <Text
+              className="text-xs font-medium text-white/60"
+              style={{ fontVariant: ["tabular-nums"] }}
+            >
+              Elapsed {formatTime(progressInWorkout.elapsedSeconds)} · Remaining{" "}
+              {formatTime(progressInWorkout.remainingSeconds)}
+            </Text>
+          )}
+
+          {!isIdle && <NextUpBar state={state} />}
+
+          <TimerControls
+            isRunning={state.isRunning}
+            isIdle={isIdle}
+            onStart={handleStart}
+            onPause={handlePause}
+            onReset={handleReset}
+            onRestartSection={restartSection}
+            onPreviousRound={previousRound}
+            onNextRound={nextRound}
+          />
+
+          {isIdle && (
+            <Pressable
+              onPress={() => {
+                reset();
+                if (isSpotifyControlled(state.config)) {
+                  spotifyApi.pausePlayback().catch(() => {});
+                }
+                router.back();
+              }}
+              className="mt-4"
+            >
+              <Text className="text-sm text-white/50">← Back to Workouts</Text>
+            </Pressable>
+          )}
+        </View>
       </View>
 
       {toast && (

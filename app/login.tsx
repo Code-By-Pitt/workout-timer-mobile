@@ -2,8 +2,10 @@ import { useState } from "react";
 import { View, Text, TextInput, Pressable } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useAuth } from "@/hooks/useAuth";
+import { useOrientationLock } from "@/hooks/useOrientationLock";
 
 export default function LoginScreen() {
+  useOrientationLock("portrait");
   const { signUp, signIn, signInWithGoogle, resetPassword } = useAuth();
   const [isSignUp, setIsSignUp] = useState(false);
   const [email, setEmail] = useState("");

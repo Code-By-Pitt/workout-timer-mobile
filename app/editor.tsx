@@ -8,6 +8,7 @@ import { SectionEditor } from "@/components/SectionEditor";
 import { SpotifyConnectButton } from "@/components/SpotifyConnectButton";
 import { SpotifyPlaylistPicker } from "@/components/SpotifyPlaylistPicker";
 import { useSpotify } from "@/hooks/useSpotify";
+import { useOrientationLock } from "@/hooks/useOrientationLock";
 import {
   createDefaultSection,
   type WorkoutConfig,
@@ -17,6 +18,7 @@ import {
 import { parseSpotifyLink } from "@/lib/spotify";
 
 export default function EditorScreen() {
+  useOrientationLock("portrait");
   const router = useRouter();
   const { editingConfig, editingId, setRunningConfig } = useWorkoutContext();
   const { save } = useWorkoutStorage();

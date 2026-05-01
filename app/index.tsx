@@ -4,10 +4,12 @@ import { useRouter } from "expo-router";
 import { useWorkoutStorage } from "@/hooks/useWorkoutStorage";
 import { useWorkoutContext } from "@/lib/WorkoutContext";
 import { useAuth } from "@/hooks/useAuth";
+import { useOrientationLock } from "@/hooks/useOrientationLock";
 import { WorkoutListItem } from "@/components/WorkoutListItem";
 import { createDefaultWorkout, type SavedWorkout } from "@/lib/timer";
 
 export default function LibraryScreen() {
+  useOrientationLock("portrait");
   const router = useRouter();
   const { workouts, remove, loaded } = useWorkoutStorage();
   const { setEditing, setRunningConfig } = useWorkoutContext();
