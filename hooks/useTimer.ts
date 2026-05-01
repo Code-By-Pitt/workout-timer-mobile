@@ -67,6 +67,68 @@ function timerReducer(state: TimerState, action: TimerAction): TimerState {
       };
     }
 
+    case "NEXT_ROUND": {
+      const { config, currentSectionIndex, currentRoundIndex } = state;
+      const section = config.sections[currentSectionIndex];
+      if (!section) return state;
+      if (currentRoundIndex + 1 < section.rounds.length) {
+        const nextRound = section.rounds[currentRoundIndex + 1];
+        return {
+          ...state,
+          phase: "workout",
+          secondsRemaining: nextRound.workoutSeconds,
+          currentRoundIndex: currentRoundIndex + 1,
+        };
+      }
+      if (currentSectionIndex + 1 < config.sections.length) {
+        const nextSection = config.sections[currentSectionIndex + 1];
+        const nextRound = nextSection.rounds[0];
+        if (!nextRound) return state;
+        return {
+          ...state,
+          phase: "workout",
+          secondsRemaining: nextRound.workoutSeconds,
+          currentSectionIndex: currentSectionIndex + 1,
+          currentRoundIndex: 0,
+        };
+      }
+      return { ...createInitialState(state.config), phase: "idle" };
+    }
+
+    case "PREVIOUS_ROUND": {
+      const { config, currentSectionIndex, currentRoundIndex } = state;
+      const section = config.sections[currentSectionIndex];
+      if (!section) return state;
+      if (currentRoundIndex > 0) {
+        const prevRound = section.rounds[currentRoundIndex - 1];
+        return {
+          ...state,
+          phase: "workout",
+          secondsRemaining: prevRound.workoutSeconds,
+          currentRoundIndex: currentRoundIndex - 1,
+        };
+      }
+      if (currentSectionIndex > 0) {
+        const prevSection = config.sections[currentSectionIndex - 1];
+        const prevRound = prevSection.rounds[prevSection.rounds.length - 1];
+        if (!prevRound) return state;
+        return {
+          ...state,
+          phase: "workout",
+          secondsRemaining: prevRound.workoutSeconds,
+          currentSectionIndex: currentSectionIndex - 1,
+          currentRoundIndex: prevSection.rounds.length - 1,
+        };
+      }
+      const firstRound = section.rounds[0];
+      if (!firstRound) return state;
+      return {
+        ...state,
+        phase: "workout",
+        secondsRemaining: firstRound.workoutSeconds,
+      };
+    }
+
     case "SET_CONFIG":
       return createInitialState(action.payload);
 
@@ -208,6 +270,8 @@ export function useTimer(initialConfig?: WorkoutConfig) {
   const pause = useCallback(() => dispatch({ type: "PAUSE" }), []);
   const reset = useCallback(() => dispatch({ type: "RESET" }), []);
   const restartSection = useCallback(() => dispatch({ type: "RESTART_SECTION" }), []);
+  const nextRound = useCallback(() => dispatch({ type: "NEXT_ROUND" }), []);
+  const previousRound = useCallback(() => dispatch({ type: "PREVIOUS_ROUND" }), []);
   const setConfig = useCallback(
     (c: WorkoutConfig) => dispatch({ type: "SET_CONFIG", payload: c }),
     []
@@ -219,6 +283,8 @@ export function useTimer(initialConfig?: WorkoutConfig) {
     pause,
     reset,
     restartSection,
+    nextRound,
+    previousRound,
     setConfig,
     phaseChanged,
     previousPhase,

@@ -11,6 +11,8 @@ import { TimerControls } from "@/components/TimerControls";
 import { RepetitionCounter } from "@/components/RepetitionCounter";
 import { ProgressRing } from "@/components/ProgressRing";
 import { NextUpBar } from "@/components/NextUpBar";
+import { computeWorkoutProgress } from "@/lib/workoutProgress";
+import { formatTime } from "@/lib/formatTime";
 import { playSound, preloadSounds } from "@/lib/playSound";
 import { parseSpotifyLink } from "@/lib/spotify";
 import * as spotifyApi from "@/lib/spotifyApi";
@@ -43,6 +45,8 @@ export default function TimerScreen() {
     pause,
     reset,
     restartSection,
+    nextRound,
+    previousRound,
     setConfig,
     phaseChanged,
     previousPhase,
@@ -206,6 +210,8 @@ export default function TimerScreen() {
     state.secondsRemaining <= 5 &&
     state.secondsRemaining > 0;
 
+  const progressInWorkout = computeWorkoutProgress(state);
+
   return (
     <SafeAreaView
       className={`flex-1 ${bgColor[state.phase]}`}
@@ -263,6 +269,16 @@ export default function TimerScreen() {
           />
         )}
 
+        {!isIdle && progressInWorkout && (
+          <Text
+            className="text-xs font-medium text-white/60"
+            style={{ fontVariant: ["tabular-nums"] }}
+          >
+            Elapsed {formatTime(progressInWorkout.elapsedSeconds)} · Remaining{" "}
+            {formatTime(progressInWorkout.remainingSeconds)}
+          </Text>
+        )}
+
         {!isIdle && <NextUpBar state={state} />}
 
         <TimerControls
@@ -272,6 +288,8 @@ export default function TimerScreen() {
           onPause={handlePause}
           onReset={handleReset}
           onRestartSection={restartSection}
+          onPreviousRound={previousRound}
+          onNextRound={nextRound}
         />
 
         {isIdle && (

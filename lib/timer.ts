@@ -53,6 +53,8 @@ export type TimerAction =
   | { type: "PAUSE" }
   | { type: "RESET" }
   | { type: "RESTART_SECTION" }
+  | { type: "NEXT_ROUND" }
+  | { type: "PREVIOUS_ROUND" }
   | { type: "SET_CONFIG"; payload: WorkoutConfig };
 
 export interface SavedWorkout {
