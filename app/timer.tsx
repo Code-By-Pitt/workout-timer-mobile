@@ -19,6 +19,7 @@ import type { Phase, WorkoutConfig } from "@/lib/timer";
 const COUNTDOWN_SECONDS = 10;
 
 const bgColor: Record<Phase, string> = {
+  prepare: "bg-yellow-500",
   workout: "bg-emerald-600",
   rest: "bg-red-600",
   section_rest: "bg-blue-600",
@@ -26,9 +27,10 @@ const bgColor: Record<Phase, string> = {
 };
 
 const ringColor: Record<Phase, string> = {
-  workout: "#bbf7d0", // emerald-200
-  rest: "#fecaca",    // red-200
-  section_rest: "#bfdbfe", // blue-200
+  prepare: "#fef9c3",      // yellow-100
+  workout: "#bbf7d0",       // emerald-200
+  rest: "#fecaca",          // red-200
+  section_rest: "#bfdbfe",  // blue-200
   idle: "rgba(255,255,255,0.4)",
 };
 
@@ -191,13 +193,15 @@ export default function TimerScreen() {
   if (state.phase === "rest") phaseDuration = currentRound?.restSeconds ?? 0;
   else if (state.phase === "section_rest")
     phaseDuration = currentSection?.restBetweenSections ?? 0;
+  else if (state.phase === "prepare")
+    phaseDuration = state.config.prepareSeconds ?? 5;
   const progress =
     phaseDuration > 0
       ? Math.max(0, Math.min(1, 1 - state.secondsRemaining / phaseDuration))
       : 0;
 
   const shouldPulse =
-    state.phase === "workout" &&
+    (state.phase === "workout" || state.phase === "prepare") &&
     state.isRunning &&
     state.secondsRemaining <= 5 &&
     state.secondsRemaining > 0;

@@ -1,4 +1,4 @@
-export type Phase = "workout" | "rest" | "section_rest" | "idle";
+export type Phase = "prepare" | "workout" | "rest" | "section_rest" | "idle";
 
 export type TransitionSound = "beep" | "bell" | "chime" | "buzzer";
 
@@ -33,6 +33,7 @@ export interface SpotifyPlaylistRef {
 export interface WorkoutConfig {
   name: string;
   sections: Section[];
+  prepareSeconds?: number;
   spotifyUrl?: string;
   spotifyPlaylist?: SpotifyPlaylistRef;
 }
@@ -79,5 +80,6 @@ export function createDefaultWorkout(): WorkoutConfig {
   return {
     name: "",
     sections: [createDefaultSection()],
+    prepareSeconds: 5,
   };
 }

@@ -13,6 +13,15 @@ export function computeNext(state: TimerState): NextInterval | null {
   const round = section?.rounds[currentRoundIndex];
   if (!section || !round) return null;
 
+  if (phase === "prepare") {
+    return {
+      phase: "workout",
+      label: round.label || undefined,
+      seconds: round.workoutSeconds,
+      sectionName: section.name || undefined,
+    };
+  }
+
   if (phase === "workout") {
     if (round.restSeconds > 0) {
       return { phase: "rest", seconds: round.restSeconds };

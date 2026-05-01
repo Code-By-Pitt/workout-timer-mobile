@@ -86,6 +86,37 @@ export default function EditorScreen() {
           className="rounded-xl bg-white/10 px-4 py-3 text-white"
         />
 
+        {/* Prep time */}
+        <View className="rounded-xl bg-white/10 p-3">
+          <Text className="mb-1 text-xs font-medium text-white/60">Prep time</Text>
+          <Text className="mb-2 text-[10px] text-white/40">
+            Yellow countdown before workout starts
+          </Text>
+          <View className="flex-row gap-1.5">
+            {[0, 5, 10, 15, 20, 30].map((s) => {
+              const current = workout.prepareSeconds ?? 5;
+              const active = current === s;
+              return (
+                <Pressable
+                  key={s}
+                  onPress={() => setWorkout({ ...workout, prepareSeconds: s })}
+                  className={`flex-1 rounded-md py-1.5 ${
+                    active ? "bg-white" : "bg-white/10"
+                  }`}
+                >
+                  <Text
+                    className={`text-center text-xs font-medium ${
+                      active ? "text-slate-800" : "text-white/70"
+                    }`}
+                  >
+                    {s === 0 ? "Off" : `${s}s`}
+                  </Text>
+                </Pressable>
+              );
+            })}
+          </View>
+        </View>
+
         {/* Music / Spotify */}
         <View className="gap-2">
           <Text className="text-xs font-medium text-white/60">

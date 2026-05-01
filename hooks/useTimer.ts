@@ -25,6 +25,17 @@ function timerReducer(state: TimerState, action: TimerAction): TimerState {
       if (state.phase === "idle") {
         const round = getCurrentRound(state);
         if (!round) return state;
+        const prepSeconds = state.config.prepareSeconds ?? 5;
+        if (prepSeconds > 0) {
+          return {
+            ...state,
+            phase: "prepare",
+            secondsRemaining: prepSeconds,
+            currentSectionIndex: 0,
+            currentRoundIndex: 0,
+            isRunning: true,
+          };
+        }
         return {
           ...state,
           phase: "workout",
@@ -69,6 +80,14 @@ function timerReducer(state: TimerState, action: TimerAction): TimerState {
 
       const round = getCurrentRound(state);
       if (!round) return createInitialState(state.config);
+
+      if (state.phase === "prepare") {
+        return {
+          ...state,
+          phase: "workout" as Phase,
+          secondsRemaining: round.workoutSeconds,
+        };
+      }
 
       if (state.phase === "workout") {
         if (round.restSeconds > 0) {
