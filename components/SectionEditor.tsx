@@ -1,15 +1,27 @@
-import { View, Text, TextInput, Pressable, ScrollView } from "react-native";
+import { View, Text, TextInput, Pressable } from "react-native";
 import type { Section, Round, TransitionSound } from "@/lib/timer";
 import { TRANSITION_SOUNDS, createDefaultRound } from "@/lib/timer";
 import { RoundEditor } from "./RoundEditor";
 import { DurationStepper } from "./DurationStepper";
 import { playSound } from "@/lib/playSound";
+import { formatTime } from "@/lib/formatTime";
 
 interface SectionEditorProps {
   index: number;
   section: Section;
   onChange: (section: Section) => void;
   onRemove: (() => void) | null;
+  collapsed?: boolean;
+  onToggleCollapse?: (() => void) | null;
+}
+
+function sectionSummary(section: Section): string {
+  const rounds = section.rounds.length;
+  const totalSeconds = section.rounds.reduce(
+    (sum, r) => sum + r.workoutSeconds + r.restSeconds,
+    0
+  );
+  return `${rounds} round${rounds !== 1 ? "s" : ""} · ${formatTime(totalSeconds)}`;
 }
 
 export function SectionEditor({
@@ -17,6 +29,8 @@ export function SectionEditor({
   section,
   onChange,
   onRemove,
+  collapsed = false,
+  onToggleCollapse = null,
 }: SectionEditorProps) {
   function updateRound(roundIndex: number, round: Round) {
     const rounds = [...section.rounds];
@@ -52,18 +66,61 @@ export function SectionEditor({
     playSound(s);
   }
 
-  return (
-    <View className="gap-4 rounded-2xl bg-white/10 p-4">
-      <View className="flex-row items-center justify-between">
+  const headerContent = (
+    <View className="flex-1 flex-col">
+      <View className="flex-row items-center gap-2">
+        {onToggleCollapse && (
+          <Text
+            className="text-xs text-white/50"
+            style={{
+              transform: [{ rotate: collapsed ? "-90deg" : "0deg" }],
+            }}
+          >
+            ▼
+          </Text>
+        )}
         <Text className="text-sm font-bold uppercase tracking-wider text-white/60">
           Section {index + 1}
+          {section.name ? (
+            <Text className="font-semibold normal-case tracking-normal text-white/80">
+              {"  "}
+              {section.name}
+            </Text>
+          ) : null}
         </Text>
-        {onRemove && (
-          <Pressable onPress={onRemove}>
-            <Text className="text-xs text-white/40">Remove section</Text>
-          </Pressable>
-        )}
       </View>
+      {collapsed && (
+        <Text className="text-[10px] text-white/40">
+          {sectionSummary(section)}
+        </Text>
+      )}
+    </View>
+  );
+
+  const Header = (
+    <View className="flex-row items-center justify-between gap-2">
+      {onToggleCollapse ? (
+        <Pressable onPress={onToggleCollapse} className="flex-1">
+          {headerContent}
+        </Pressable>
+      ) : (
+        headerContent
+      )}
+      {onRemove && (
+        <Pressable onPress={onRemove}>
+          <Text className="text-xs text-white/40">Remove</Text>
+        </Pressable>
+      )}
+    </View>
+  );
+
+  if (collapsed) {
+    return <View className="rounded-2xl bg-white/10 p-4">{Header}</View>;
+  }
+
+  return (
+    <View className="gap-4 rounded-2xl bg-white/10 p-4">
+      {Header}
 
       <TextInput
         value={section.name}

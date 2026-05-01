@@ -23,7 +23,20 @@ export default function EditorScreen() {
   const { loggedIn, isPremium } = useSpotify();
   const [workout, setWorkout] = useState<WorkoutConfig>(editingConfig);
   const [pickerVisible, setPickerVisible] = useState(false);
+  const [collapsedSections, setCollapsedSections] = useState<Set<number>>(
+    new Set()
+  );
   const canPickPlaylist = loggedIn && isPremium;
+  const showCollapseToggle = workout.sections.length > 1;
+
+  function toggleCollapsed(index: number) {
+    setCollapsedSections((prev) => {
+      const next = new Set(prev);
+      if (next.has(index)) next.delete(index);
+      else next.add(index);
+      return next;
+    });
+  }
 
   function pickPlaylist(ref: SpotifyPlaylistRef) {
     setWorkout({ ...workout, spotifyPlaylist: ref, spotifyUrl: undefined });
@@ -44,6 +57,14 @@ export default function EditorScreen() {
     setWorkout({
       ...workout,
       sections: workout.sections.filter((_, i) => i !== index),
+    });
+    setCollapsedSections((prev) => {
+      const next = new Set<number>();
+      prev.forEach((i) => {
+        if (i < index) next.add(i);
+        else if (i > index) next.add(i - 1);
+      });
+      return next;
     });
   }
 
@@ -66,18 +87,28 @@ export default function EditorScreen() {
 
   return (
     <SafeAreaView className="flex-1 bg-slate-800" edges={["top", "bottom"]}>
+      {/* Sticky header */}
+      <View className="flex-row items-center justify-between border-b border-white/10 px-4 py-3">
+        <Pressable onPress={() => router.back()}>
+          <Text className="text-sm text-white/60">← Back</Text>
+        </Pressable>
+        <Text className="text-base font-semibold text-white">
+          {editingId ? "Edit Workout" : "New Workout"}
+        </Text>
+        <Pressable
+          onPress={handleSave}
+          className="rounded-lg bg-emerald-600 px-3 py-1.5 active:bg-emerald-700"
+        >
+          <Text className="text-sm font-semibold text-white">Save</Text>
+        </Pressable>
+      </View>
+
+      {/* Scrollable form */}
       <ScrollView
+        className="flex-1"
         contentContainerStyle={{ padding: 16, gap: 20, paddingBottom: 40 }}
         keyboardShouldPersistTaps="handled"
       >
-        <Pressable onPress={() => router.back()} className="self-start">
-          <Text className="text-sm text-white/50">← Back to Workouts</Text>
-        </Pressable>
-
-        <Text className="text-center text-2xl font-bold text-white">
-          {editingId ? "Edit Workout" : "New Workout"}
-        </Text>
-
         <TextInput
           value={workout.name}
           onChangeText={(text) => setWorkout({ ...workout, name: text })}
@@ -124,7 +155,6 @@ export default function EditorScreen() {
           </Text>
           <SpotifyConnectButton />
 
-          {/* Picked playlist card */}
           {canPickPlaylist && workout.spotifyPlaylist && (
             <View className="flex-row items-center gap-3 rounded-xl bg-white/10 p-2">
               {workout.spotifyPlaylist.imageUrl ? (
@@ -165,7 +195,6 @@ export default function EditorScreen() {
             </View>
           )}
 
-          {/* Pick playlist button (Premium, logged in, nothing picked) */}
           {canPickPlaylist && !workout.spotifyPlaylist && (
             <Pressable
               onPress={() => setPickerVisible(true)}
@@ -177,7 +206,6 @@ export default function EditorScreen() {
             </Pressable>
           )}
 
-          {/* Fallback: paste URL (shown when no playlist picked) */}
           {!workout.spotifyPlaylist && (
             <>
               {canPickPlaylist && (
@@ -230,7 +258,13 @@ export default function EditorScreen() {
               index={i}
               section={section}
               onChange={(s) => updateSection(i, s)}
-              onRemove={workout.sections.length > 1 ? () => removeSection(i) : null}
+              onRemove={
+                workout.sections.length > 1 ? () => removeSection(i) : null
+              }
+              collapsed={collapsedSections.has(i)}
+              onToggleCollapse={
+                showCollapseToggle ? () => toggleCollapsed(i) : null
+              }
             />
           ))}
         </View>
@@ -243,7 +277,10 @@ export default function EditorScreen() {
             + Add Section
           </Text>
         </Pressable>
+      </ScrollView>
 
+      {/* Sticky Start Workout */}
+      <View className="border-t border-white/10 px-4 py-3">
         <Pressable
           onPress={handleStart}
           className="rounded-2xl bg-white py-4 active:bg-white/90"
@@ -252,16 +289,7 @@ export default function EditorScreen() {
             Start Workout
           </Text>
         </Pressable>
-
-        <Pressable
-          onPress={handleSave}
-          className="rounded-2xl bg-emerald-600 py-3 active:bg-emerald-700"
-        >
-          <Text className="text-center text-lg font-bold text-white">
-            {editingId ? "Save Changes" : "Save Workout"}
-          </Text>
-        </Pressable>
-      </ScrollView>
+      </View>
     </SafeAreaView>
   );
 }
