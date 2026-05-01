@@ -9,6 +9,8 @@ import { useSpotify } from "@/hooks/useSpotify";
 import { TimerDisplay } from "@/components/TimerDisplay";
 import { TimerControls } from "@/components/TimerControls";
 import { RepetitionCounter } from "@/components/RepetitionCounter";
+import { ProgressRing } from "@/components/ProgressRing";
+import { NextUpBar } from "@/components/NextUpBar";
 import { playSound, preloadSounds } from "@/lib/playSound";
 import { parseSpotifyLink } from "@/lib/spotify";
 import * as spotifyApi from "@/lib/spotifyApi";
@@ -18,9 +20,16 @@ const COUNTDOWN_SECONDS = 10;
 
 const bgColor: Record<Phase, string> = {
   workout: "bg-emerald-600",
-  rest: "bg-amber-500",
+  rest: "bg-red-600",
   section_rest: "bg-blue-600",
   idle: "bg-slate-800",
+};
+
+const ringColor: Record<Phase, string> = {
+  workout: "#bbf7d0", // emerald-200
+  rest: "#fecaca",    // red-200
+  section_rest: "#bfdbfe", // blue-200
+  idle: "rgba(255,255,255,0.4)",
 };
 
 export default function TimerScreen() {
@@ -177,6 +186,22 @@ export default function TimerScreen() {
   const totalRoundsInSection = currentSection?.rounds.length ?? 0;
   const headerName = state.config.name || "WORKOUT TIMER";
 
+  // Phase duration for ProgressRing fill
+  let phaseDuration = currentRound?.workoutSeconds ?? 0;
+  if (state.phase === "rest") phaseDuration = currentRound?.restSeconds ?? 0;
+  else if (state.phase === "section_rest")
+    phaseDuration = currentSection?.restBetweenSections ?? 0;
+  const progress =
+    phaseDuration > 0
+      ? Math.max(0, Math.min(1, 1 - state.secondsRemaining / phaseDuration))
+      : 0;
+
+  const shouldPulse =
+    state.phase === "workout" &&
+    state.isRunning &&
+    state.secondsRemaining <= 5 &&
+    state.secondsRemaining > 0;
+
   return (
     <SafeAreaView
       className={`flex-1 ${bgColor[state.phase]}`}
@@ -214,10 +239,18 @@ export default function TimerScreen() {
           <Text className="text-3xl font-bold text-white">{currentRound.label}</Text>
         )}
 
-        <TimerDisplay
-          secondsRemaining={state.secondsRemaining}
-          phase={state.phase}
-        />
+        <ProgressRing
+          progress={progress}
+          size={300}
+          strokeWidth={12}
+          activeColor={ringColor[state.phase]}
+        >
+          <TimerDisplay
+            secondsRemaining={state.secondsRemaining}
+            phase={state.phase}
+            pulse={shouldPulse}
+          />
+        </ProgressRing>
 
         {!isIdle && (
           <RepetitionCounter
@@ -225,6 +258,8 @@ export default function TimerScreen() {
             totalRounds={totalRoundsInSection}
           />
         )}
+
+        {!isIdle && <NextUpBar state={state} />}
 
         <TimerControls
           isRunning={state.isRunning}
