@@ -96,6 +96,24 @@ export async function getPlaylists(): Promise<SpotifyPlaylist[]> {
   return all;
 }
 
+export async function searchPublicPlaylists(
+  query: string
+): Promise<SpotifyPlaylist[]> {
+  if (!query.trim()) return [];
+  const params = new URLSearchParams({
+    q: query.trim(),
+    type: "playlist",
+    limit: "20",
+  });
+  const res = await apiFetch(`/search?${params.toString()}`);
+  const data: {
+    playlists?: { items: (SpotifyPlaylist | null)[] };
+  } = await res.json();
+  return (data.playlists?.items ?? []).filter(
+    (p): p is SpotifyPlaylist => p !== null
+  );
+}
+
 export async function getDevices(): Promise<SpotifyDevice[]> {
   const res = await apiFetch("/me/player/devices");
   const data: { devices: SpotifyDevice[] } = await res.json();
