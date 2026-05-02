@@ -14,7 +14,15 @@ export interface SpotifyPlaylist {
   name: string;
   uri: string;
   images: { url: string; width?: number; height?: number }[];
-  tracks: { total: number };
+  // Spotify renamed the simplified-playlist track-count field from `tracks`
+  // to `items` on /me/playlists. Both have shape `{ href, total }`. Read
+  // whichever is present.
+  tracks?: { total: number };
+  items?: { total: number };
+}
+
+export function getPlaylistTrackCount(p: SpotifyPlaylist): number {
+  return p.items?.total ?? p.tracks?.total ?? 0;
 }
 
 export interface SpotifyDevice {

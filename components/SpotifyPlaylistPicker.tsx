@@ -9,7 +9,11 @@ import {
   Image,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
-import { getPlaylists, type SpotifyPlaylist } from "@/lib/spotifyApi";
+import {
+  getPlaylists,
+  getPlaylistTrackCount,
+  type SpotifyPlaylist,
+} from "@/lib/spotifyApi";
 import type { SpotifyPlaylistRef } from "@/lib/timer";
 
 interface Props {
@@ -46,7 +50,7 @@ export function SpotifyPlaylistPicker({ visible, onSelect, onClose }: Props) {
       uri: p.uri,
       name: p.name,
       imageUrl: p.images?.[0]?.url,
-      trackCount: p.tracks?.total,
+      trackCount: getPlaylistTrackCount(p),
     };
     onSelect(ref);
   }
@@ -122,7 +126,7 @@ export function SpotifyPlaylistPicker({ visible, onSelect, onClose }: Props) {
                       {item.name}
                     </Text>
                     <Text className="text-xs text-white/50">
-                      {item.tracks?.total ?? 0} tracks
+                      {getPlaylistTrackCount(item)} tracks
                     </Text>
                   </View>
                 </Pressable>
