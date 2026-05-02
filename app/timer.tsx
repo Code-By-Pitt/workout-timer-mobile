@@ -121,44 +121,32 @@ export default function TimerScreen() {
     return Boolean(config.spotifyPlaylist) && loggedIn && isPremium;
   }
 
-  async function handleStart() {
+  function handleStart() {
     if (!audioPrewarmed.current) {
-      await preloadSounds();
+      // Fire preload in parallel — don't block timer start
+      preloadSounds().catch(() => {});
       audioPrewarmed.current = true;
     }
     if (state.phase === "idle") {
-      // First start: begin playback from the picked playlist
-      await openSpotifyForConfig(state.config);
+      // Fire Spotify in parallel — don't block timer
+      openSpotifyForConfig(state.config).catch(() => {});
     } else if (isSpotifyControlled(state.config)) {
-      // Resume existing playback without restarting the playlist
-      try {
-        await spotifyApi.resumePlayback();
-      } catch {
-        // ignore
-      }
+      spotifyApi.resumePlayback().catch(() => {});
     }
     start();
   }
 
-  async function handlePause() {
+  function handlePause() {
     pause();
     if (isSpotifyControlled(state.config)) {
-      try {
-        await spotifyApi.pausePlayback();
-      } catch {
-        // ignore
-      }
+      spotifyApi.pausePlayback().catch(() => {});
     }
   }
 
-  async function handleReset() {
+  function handleReset() {
     reset();
     if (isSpotifyControlled(state.config)) {
-      try {
-        await spotifyApi.pausePlayback();
-      } catch {
-        // ignore
-      }
+      spotifyApi.pausePlayback().catch(() => {});
     }
   }
 
