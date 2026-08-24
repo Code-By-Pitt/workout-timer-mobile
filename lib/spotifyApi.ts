@@ -1,4 +1,4 @@
-import { getAccessToken, logout } from "./spotifyAuth";
+import { getAccessToken, invalidateAccessToken, logout } from "./spotifyAuth";
 
 const API_BASE = "https://api.spotify.com/v1";
 
@@ -43,6 +43,13 @@ export class SpotifyApiError extends Error {
   }
 }
 
+async function send(path: string, init: RequestInit, token: string) {
+  return fetch(`${API_BASE}${path}`, {
+    ...init,
+    headers: { ...init.headers, Authorization: `Bearer ${token}` },
+  });
+}
+
 async function apiFetch(
   path: string,
   init: RequestInit = {}
@@ -50,17 +57,21 @@ async function apiFetch(
   const token = await getAccessToken();
   if (!token) throw new SpotifyApiError(401, "Not authenticated");
 
-  const res = await fetch(`${API_BASE}${path}`, {
-    ...init,
-    headers: {
-      ...init.headers,
-      Authorization: `Bearer ${token}`,
-    },
-  });
+  let res = await send(path, init, token);
 
+  // A 401 on a token we thought was valid means it was revoked or our clock is
+  // off. Refresh once and retry before giving up — this used to delete the
+  // stored refresh token outright, forcing a full re-auth on any hiccup.
   if (res.status === 401) {
-    await logout();
-    throw new SpotifyApiError(401, "Session expired");
+    await invalidateAccessToken();
+    const retryToken = await getAccessToken();
+    if (!retryToken) throw new SpotifyApiError(401, "Session expired");
+
+    res = await send(path, init, retryToken);
+    if (res.status === 401) {
+      await logout();
+      throw new SpotifyApiError(401, "Session expired");
+    }
   }
 
   if (!res.ok) {
@@ -70,6 +81,12 @@ async function apiFetch(
       msg = body.error?.message ?? msg;
     } catch {
       // ignore
+    }
+    // 403 is not an auth failure — it's usually restricted device, region, or
+    // an app still limited to Spotify's development-mode allowlist. Keep the
+    // token; only the message changes.
+    if (res.status === 403) {
+      throw new SpotifyApiError(403, msg || "Spotify denied this request");
     }
     throw new SpotifyApiError(res.status, msg);
   }

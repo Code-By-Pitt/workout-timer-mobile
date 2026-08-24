@@ -3,6 +3,7 @@ import { View, Text, TextInput, Pressable } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useAuth } from "@/hooks/useAuth";
 import { useOrientationLock } from "@/hooks/useOrientationLock";
+import { openPrivacyPolicy } from "@/lib/privacy";
 
 export default function LoginScreen() {
   useOrientationLock("portrait");
@@ -131,6 +132,12 @@ export default function LoginScreen() {
             <Text className="font-medium text-white underline">
               {isSignUp ? "Sign In" : "Sign Up"}
             </Text>
+          </Text>
+        </Pressable>
+
+        <Pressable onPress={() => openPrivacyPolicy()}>
+          <Text className="text-center text-xs text-white/40 underline">
+            Privacy Policy
           </Text>
         </Pressable>
       </View>

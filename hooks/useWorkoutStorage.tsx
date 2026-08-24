@@ -16,6 +16,10 @@ const LOCAL_STORAGE_KEY = "workout-timer-workouts";
 interface WorkoutStorageValue {
   workouts: SavedWorkout[];
   loaded: boolean;
+  /** Set when the initial load failed, so the UI can distinguish that from an empty library. */
+  loadError: string | null;
+  reload: () => Promise<void>;
+  /** Rejects on failure — callers must not treat a resolved promise as optional. */
   save: (config: WorkoutConfig, existingId?: string) => Promise<void>;
   remove: (id: string) => Promise<void>;
 }
@@ -26,37 +30,49 @@ export function WorkoutStorageProvider({ children }: { children: ReactNode }) {
   const { user } = useAuth();
   const [workouts, setWorkouts] = useState<SavedWorkout[]>([]);
   const [loaded, setLoaded] = useState(false);
+  const [loadError, setLoadError] = useState<string | null>(null);
+
+  const load = useCallback(async () => {
+    if (!user) return;
+    const { data, error } = await supabase
+      .from("workouts")
+      .select("*")
+      .order("updated_at", { ascending: false });
+
+    if (error) {
+      // Leave any previously loaded workouts on screen rather than implying
+      // the library is empty.
+      setLoadError("Couldn't load your workouts. Check your connection.");
+    } else {
+      setLoadError(null);
+      setWorkouts(
+        (data ?? []).map((row) => ({
+          id: row.id,
+          config: row.config as WorkoutConfig,
+          createdAt: new Date(row.created_at).getTime(),
+          updatedAt: new Date(row.updated_at).getTime(),
+        }))
+      );
+    }
+    setLoaded(true);
+  }, [user]);
 
   useEffect(() => {
-    if (!user) return;
-
-    async function loadAndMigrate() {
-      await migrateLocalWorkouts(user!.id);
-
-      const { data } = await supabase
-        .from("workouts")
-        .select("*")
-        .order("updated_at", { ascending: false });
-
-      if (data) {
-        setWorkouts(
-          data.map((row) => ({
-            id: row.id,
-            config: row.config as WorkoutConfig,
-            createdAt: new Date(row.created_at).getTime(),
-            updatedAt: new Date(row.updated_at).getTime(),
-          }))
-        );
-      }
-      setLoaded(true);
+    if (!user) {
+      setWorkouts([]);
+      setLoaded(false);
+      setLoadError(null);
+      return;
     }
-
-    loadAndMigrate();
-  }, [user]);
+    (async () => {
+      await migrateLocalWorkouts(user.id);
+      await load();
+    })();
+  }, [user, load]);
 
   const save = useCallback(
     async (config: WorkoutConfig, existingId?: string): Promise<void> => {
-      if (!user) return;
+      if (!user) throw new Error("You're signed out. Sign in and try again.");
 
       if (existingId) {
         const { error } = await supabase
@@ -66,37 +82,37 @@ export function WorkoutStorageProvider({ children }: { children: ReactNode }) {
             config,
             updated_at: new Date().toISOString(),
           })
-          .eq("id", existingId);
+          .eq("id", existingId)
+          // Belt-and-braces alongside RLS: never let an id alone authorize a write.
+          .eq("user_id", user.id);
 
-        if (!error) {
-          setWorkouts((prev) =>
-            prev.map((w) =>
-              w.id === existingId
-                ? { ...w, config, updatedAt: Date.now() }
-                : w
-            )
-          );
-        }
+        if (error) throw new Error("Couldn't save your changes. Please try again.");
+
+        setWorkouts((prev) =>
+          prev.map((w) =>
+            w.id === existingId ? { ...w, config, updatedAt: Date.now() } : w
+          )
+        );
       } else {
         const { data, error } = await supabase
           .from("workouts")
-          .insert({
-            user_id: user.id,
-            name: config.name,
-            config,
-          })
+          .insert({ user_id: user.id, name: config.name, config })
           .select()
           .single();
 
-        if (!error && data) {
-          const newWorkout: SavedWorkout = {
+        if (error || !data) {
+          throw new Error("Couldn't save your workout. Please try again.");
+        }
+
+        setWorkouts((prev) => [
+          {
             id: data.id,
             config,
             createdAt: new Date(data.created_at).getTime(),
             updatedAt: new Date(data.updated_at).getTime(),
-          };
-          setWorkouts((prev) => [newWorkout, ...prev]);
-        }
+          },
+          ...prev,
+        ]);
       }
     },
     [user]
@@ -104,22 +120,25 @@ export function WorkoutStorageProvider({ children }: { children: ReactNode }) {
 
   const remove = useCallback(
     async (id: string): Promise<void> => {
-      if (!user) return;
+      if (!user) throw new Error("You're signed out. Sign in and try again.");
 
       const { error } = await supabase
         .from("workouts")
         .delete()
-        .eq("id", id);
+        .eq("id", id)
+        .eq("user_id", user.id);
 
-      if (!error) {
-        setWorkouts((prev) => prev.filter((w) => w.id !== id));
-      }
+      if (error) throw new Error("Couldn't delete that workout. Please try again.");
+
+      setWorkouts((prev) => prev.filter((w) => w.id !== id));
     },
     [user]
   );
 
   return (
-    <WorkoutStorageContext.Provider value={{ workouts, loaded, save, remove }}>
+    <WorkoutStorageContext.Provider
+      value={{ workouts, loaded, loadError, reload: load, save, remove }}
+    >
       {children}
     </WorkoutStorageContext.Provider>
   );

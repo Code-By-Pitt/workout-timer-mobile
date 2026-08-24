@@ -2,8 +2,9 @@ import { useEffect, useRef, useState } from "react";
 import { View, Text, Pressable, Linking, useWindowDimensions } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useRouter } from "expo-router";
-import { useKeepAwake } from "expo-keep-awake";
+import { activateKeepAwakeAsync, deactivateKeepAwake } from "expo-keep-awake";
 import { useTimer } from "@/hooks/useTimer";
+import type { TimerTransition } from "@/hooks/useTimer";
 import { useWorkoutContext } from "@/lib/WorkoutContext";
 import { useSpotify } from "@/hooks/useSpotify";
 import { useOrientationLock } from "@/hooks/useOrientationLock";
@@ -14,12 +15,15 @@ import { ProgressRing } from "@/components/ProgressRing";
 import { NextUpBar } from "@/components/NextUpBar";
 import { computeWorkoutProgress } from "@/lib/workoutProgress";
 import { formatTime } from "@/lib/formatTime";
-import { playSound, preloadSounds } from "@/lib/playSound";
+import {
+  playSound,
+  preloadSounds,
+  startKeepAlive,
+  stopKeepAlive,
+} from "@/lib/playSound";
 import { parseSpotifyLink } from "@/lib/spotify";
 import * as spotifyApi from "@/lib/spotifyApi";
 import type { Phase, WorkoutConfig } from "@/lib/timer";
-
-const COUNTDOWN_SECONDS = 10;
 
 const bgColor: Record<Phase, string> = {
   prepare: "bg-yellow-500",
@@ -43,6 +47,46 @@ export default function TimerScreen() {
   const { runningConfig } = useWorkoutContext();
   const { width, height } = useWindowDimensions();
   const isLandscape = width > height;
+  const audioPrewarmed = useRef(false);
+  const initRef = useRef(false);
+  const { loggedIn, isPremium } = useSpotify();
+  const [toast, setToast] = useState<string | null>(null);
+  const toastTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  function showToast(message: string) {
+    setToast(message);
+    if (toastTimer.current) clearTimeout(toastTimer.current);
+    toastTimer.current = setTimeout(() => setToast(null), 4000);
+  }
+
+  useEffect(
+    () => () => {
+      if (toastTimer.current) clearTimeout(toastTimer.current);
+    },
+    []
+  );
+
+  const spotifyControlled =
+    Boolean(runningConfig?.spotifyPlaylist) && loggedIn && isPremium;
+
+  // Cues are driven by ticker transitions rather than a React effect: catching
+  // up after the app was backgrounded collapses many phases into one render, so
+  // an effect would see — and sound — at most one of them.
+  function handleTransition(t: TimerTransition) {
+    if (t.kind === "countdown") {
+      playSound("clap");
+      return;
+    }
+    if (t.kind === "complete") {
+      playSound("alarm");
+      stopKeepAlive().catch(() => {});
+      if (spotifyControlled) spotifyApi.pausePlayback().catch(() => {});
+      return;
+    }
+    const section = runningConfig?.sections[t.sectionIndex];
+    playSound(section?.transitionSound ?? "beep");
+  }
+
   const {
     state,
     start,
@@ -52,21 +96,13 @@ export default function TimerScreen() {
     nextRound,
     previousRound,
     setConfig,
-    phaseChanged,
-    previousPhase,
-  } = useTimer(runningConfig ?? undefined);
-  const audioPrewarmed = useRef(false);
-  const initRef = useRef(false);
-  const { loggedIn, isPremium } = useSpotify();
-  const [toast, setToast] = useState<string | null>(null);
+  } = useTimer(runningConfig ?? undefined, handleTransition);
 
-  function showToast(message: string) {
-    setToast(message);
-    setTimeout(() => setToast(null), 4000);
-  }
-
-  // Keep screen awake while timer is running
-  useKeepAwake();
+  // Reaching /timer without a selection previously showed a phantom default
+  // workout; send the user back to the library instead.
+  useEffect(() => {
+    if (!runningConfig) router.replace("/");
+  }, [runningConfig, router]);
 
   // Initialize the timer with the running config on mount
   useEffect(() => {
@@ -77,9 +113,20 @@ export default function TimerScreen() {
     }
   }, [runningConfig, setConfig]);
 
+  // Hold the audio session open (and the screen on) only while actually
+  // running — otherwise an abandoned timer screen drains the battery.
+  useEffect(() => {
+    if (!state.isRunning) return;
+    activateKeepAwakeAsync("timer").catch(() => {});
+    startKeepAlive().catch(() => {});
+    return () => {
+      deactivateKeepAwake("timer").catch(() => {});
+      stopKeepAlive().catch(() => {});
+    };
+  }, [state.isRunning]);
+
   const currentSection = state.config.sections[state.currentSectionIndex];
   const currentRound = currentSection?.rounds[state.currentRoundIndex];
-  const transitionSound = currentSection?.transitionSound ?? "beep";
 
   async function openSpotifyForConfig(config: WorkoutConfig) {
     // Prefer picked playlist via Connect API (Premium users)
@@ -117,10 +164,6 @@ export default function TimerScreen() {
     }
   }
 
-  function isSpotifyControlled(config: WorkoutConfig) {
-    return Boolean(config.spotifyPlaylist) && loggedIn && isPremium;
-  }
-
   function handleStart() {
     if (!audioPrewarmed.current) {
       // Fire preload in parallel — don't block timer start
@@ -130,7 +173,7 @@ export default function TimerScreen() {
     if (state.phase === "idle") {
       // Fire Spotify in parallel — don't block timer
       openSpotifyForConfig(state.config).catch(() => {});
-    } else if (isSpotifyControlled(state.config)) {
+    } else if (spotifyControlled) {
       spotifyApi.resumePlayback().catch(() => {});
     }
     start();
@@ -138,46 +181,17 @@ export default function TimerScreen() {
 
   function handlePause() {
     pause();
-    if (isSpotifyControlled(state.config)) {
+    if (spotifyControlled) {
       spotifyApi.pausePlayback().catch(() => {});
     }
   }
 
   function handleReset() {
     reset();
-    if (isSpotifyControlled(state.config)) {
+    if (spotifyControlled) {
       spotifyApi.pausePlayback().catch(() => {});
     }
   }
-
-  // Play sounds on phase transitions
-  useEffect(() => {
-    if (!phaseChanged) return;
-    if (state.phase === "workout" && previousPhase !== "idle") {
-      playSound(transitionSound);
-    } else if (state.phase === "rest") {
-      playSound(transitionSound);
-    } else if (state.phase === "section_rest") {
-      playSound(transitionSound);
-    } else if (state.phase === "idle" && previousPhase !== "idle") {
-      playSound("alarm");
-      // Workout complete — stop Spotify playback
-      if (isSpotifyControlled(state.config)) {
-        spotifyApi.pausePlayback().catch(() => {});
-      }
-    }
-  }, [state.phase, phaseChanged, previousPhase, transitionSound]);
-
-  // Clap at 10 seconds remaining in work phase
-  useEffect(() => {
-    if (
-      state.phase === "workout" &&
-      state.isRunning &&
-      state.secondsRemaining === COUNTDOWN_SECONDS
-    ) {
-      playSound("clap");
-    }
-  }, [state.phase, state.isRunning, state.secondsRemaining]);
 
   const isIdle = state.phase === "idle";
   const totalSections = state.config.sections.length;
@@ -318,7 +332,7 @@ export default function TimerScreen() {
             <Pressable
               onPress={() => {
                 reset();
-                if (isSpotifyControlled(state.config)) {
+                if (spotifyControlled) {
                   spotifyApi.pausePlayback().catch(() => {});
                 }
                 router.back();

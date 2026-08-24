@@ -21,11 +21,46 @@ export async function initAudio() {
   try {
     await Audio.setAudioModeAsync({
       playsInSilentModeIOS: true,
-      staysActiveInBackground: false,
+      // Backs the UIBackgroundModes:audio entitlement in app.json. Without this
+      // iOS tears down the session — and the JS thread with it — on background.
+      staysActiveInBackground: true,
       shouldDuckAndroid: true,
+      // Default interruption mode is MixWithOthers, which is what we want:
+      // cues layer over Spotify instead of pausing or ducking it.
     });
   } catch {
     // Ignore audio mode errors
+  }
+}
+
+// iOS only keeps a backgrounded process alive while audio is actively playing.
+// Our cues are short, so the app would suspend between them. Looping silence at
+// volume 0 for the duration of the workout holds the session open.
+let keepAlive: Audio.Sound | null = null;
+
+export async function startKeepAlive() {
+  await initAudio();
+  if (keepAlive) return;
+  try {
+    const { sound } = await Audio.Sound.createAsync(
+      require("../assets/sounds/silence.wav"),
+      { shouldPlay: true, isLooping: true, volume: 0 }
+    );
+    keepAlive = sound;
+  } catch {
+    // Keepalive is best-effort; the timer still works in the foreground.
+  }
+}
+
+export async function stopKeepAlive() {
+  const sound = keepAlive;
+  if (!sound) return;
+  keepAlive = null;
+  try {
+    await sound.stopAsync();
+    await sound.unloadAsync();
+  } catch {
+    // ignore
   }
 }
 
@@ -70,6 +105,7 @@ export async function playSound(name: SoundName) {
 }
 
 export async function unloadAllSounds() {
+  await stopKeepAlive();
   for (const sound of cache.values()) {
     try {
       await sound.unloadAsync();

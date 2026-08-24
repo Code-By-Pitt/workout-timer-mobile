@@ -10,7 +10,10 @@ mkdirSync(outDir, { recursive: true });
 // Stopwatch icon, slate-800 background, white outline timer
 const svg = `
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024">
-  <rect width="1024" height="1024" rx="180" fill="#1e293b"/>
+  <!-- Full-bleed, no corner radius: iOS applies its own (larger) mask. Rounding
+       here left transparent corners that prebuild flattened to white, showing
+       as white slivers behind the system mask. -->
+  <rect width="1024" height="1024" fill="#1e293b"/>
 
   <!-- Crown/button on top -->
   <rect x="464" y="120" width="96" height="64" rx="16" fill="#94a3b8"/>
@@ -43,7 +46,11 @@ const svg = `
 
 await sharp(Buffer.from(svg))
   .resize(1024, 1024)
+  // App Store icons must be fully opaque — an alpha channel is a rejection at
+  // upload validation.
+  .flatten({ background: "#1e293b" })
+  .removeAlpha()
   .png()
   .toFile(resolve(outDir, "icon.png"));
 
-console.log("✓ icon.png (1024x1024)");
+console.log("✓ icon.png (1024x1024, opaque)");
