@@ -51,7 +51,7 @@
       "spotifyClientId": "8debaff7dd5e4cb5bf4ee1fe6014265a",
       "supabaseUrl": "https://xncjzcjorlydoedxywze.supabase.co",
       "supabaseAnonKey": "sb_publishable_SFFZpDj3meGe1Mvh8Q0HiQ_atPcVGst",
-      "privacyPolicyUrl": "https://REPLACE-WITH-YOUR-DOMAIN/privacy",
+      "privacyPolicyUrl": "https://www.apscripts.com/privacy-policy",
       "router": {},
       "eas": {
         "projectId": "ded2b16f-5a2b-4463-b537-781edebad201"
