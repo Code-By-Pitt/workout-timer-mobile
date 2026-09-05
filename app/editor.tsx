@@ -1,5 +1,13 @@
 import { useState } from "react";
-import { View, Text, TextInput, Pressable, ScrollView, Image } from "react-native";
+import {
+  View,
+  Text,
+  TextInput,
+  Pressable,
+  ScrollView,
+  Image,
+  Alert,
+} from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useRouter } from "expo-router";
 import { useWorkoutContext } from "@/lib/WorkoutContext";
@@ -25,6 +33,7 @@ export default function EditorScreen() {
   const { loggedIn, isPremium } = useSpotify();
   const [workout, setWorkout] = useState<WorkoutConfig>(editingConfig);
   const [pickerVisible, setPickerVisible] = useState(false);
+  const [saving, setSaving] = useState(false);
   const [collapsedSections, setCollapsedSections] = useState<Set<number>>(
     new Set()
   );
@@ -78,8 +87,21 @@ export default function EditorScreen() {
   }
 
   async function handleSave() {
-    await save(workout, editingId);
-    router.back();
+    if (saving) return;
+    setSaving(true);
+    try {
+      await save(workout, editingId);
+      router.back();
+    } catch (e) {
+      // Navigating back regardless used to discard the user's edits silently.
+      Alert.alert(
+        "Save failed",
+        e instanceof Error ? e.message : "Please try again.",
+        [{ text: "OK" }]
+      );
+    } finally {
+      setSaving(false);
+    }
   }
 
   function handleStart() {
@@ -99,9 +121,14 @@ export default function EditorScreen() {
         </Text>
         <Pressable
           onPress={handleSave}
-          className="rounded-lg bg-emerald-600 px-3 py-1.5 active:bg-emerald-700"
+          disabled={saving}
+          className={`rounded-lg px-3 py-1.5 ${
+            saving ? "bg-emerald-600/50" : "bg-emerald-600 active:bg-emerald-700"
+          }`}
         >
-          <Text className="text-sm font-semibold text-white">Save</Text>
+          <Text className="text-sm font-semibold text-white">
+            {saving ? "Saving…" : "Save"}
+          </Text>
         </Pressable>
       </View>
 

@@ -179,6 +179,30 @@ async function loadTokensFromSupabase(): Promise<{
   return data ?? null;
 }
 
+/**
+ * Drop the cached access token so the next call re-reads from Supabase and
+ * refreshes if needed. Used to retry a request that got a 401 on a token we
+ * still believed was valid (clock skew, server-side revocation).
+ */
+export async function invalidateAccessToken(): Promise<void> {
+  cachedAccessToken = null;
+  cachedExpiresAt = 0;
+  try {
+    await SecureStore.deleteItemAsync("spotify_access_token");
+    await SecureStore.deleteItemAsync("spotify_expires_at");
+  } catch {
+    // ignore
+  }
+}
+
+/** Spotify rejected the refresh token itself — the connection is genuinely dead. */
+function isInvalidGrant(err: unknown): boolean {
+  const code = (err as { code?: string } | null)?.code;
+  if (code === "invalid_grant") return true;
+  const message = err instanceof Error ? err.message : String(err ?? "");
+  return message.includes("invalid_grant");
+}
+
 async function refreshAccessToken(
   refreshToken: string
 ): Promise<string | null> {
@@ -196,8 +220,14 @@ async function refreshAccessToken(
       tokenResult.expiresIn ?? 3600
     );
     return tokenResult.accessToken;
-  } catch {
-    await logout();
+  } catch (err) {
+    // Only discard the stored refresh token when Spotify actually rejects it.
+    // A network failure here used to force a full re-auth.
+    if (isInvalidGrant(err)) {
+      await logout();
+    } else {
+      await invalidateAccessToken();
+    }
     return null;
   }
 }

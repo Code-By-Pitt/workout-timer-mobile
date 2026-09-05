@@ -45,16 +45,22 @@ export interface TimerState {
   currentRoundIndex: number;
   isRunning: boolean;
   config: WorkoutConfig;
+  /**
+   * Absolute epoch-ms deadline for the current phase, or null when paused/idle.
+   * This is the source of truth for elapsed time — `secondsRemaining` is
+   * derived from it — so the timer stays correct across suspension.
+   */
+  phaseEndsAt: number | null;
 }
 
 export type TimerAction =
-  | { type: "TICK" }
-  | { type: "START" }
+  | { type: "SYNC"; state: TimerState }
+  | { type: "START"; now: number }
   | { type: "PAUSE" }
   | { type: "RESET" }
-  | { type: "RESTART_SECTION" }
-  | { type: "NEXT_ROUND" }
-  | { type: "PREVIOUS_ROUND" }
+  | { type: "RESTART_SECTION"; now: number }
+  | { type: "NEXT_ROUND"; now: number }
+  | { type: "PREVIOUS_ROUND"; now: number }
   | { type: "SET_CONFIG"; payload: WorkoutConfig };
 
 export interface SavedWorkout {
